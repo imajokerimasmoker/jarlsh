@@ -158,7 +158,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/search", searchHandler)
+	mux.HandleFunc("/search/", searchHandler)
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +197,7 @@ func main() {
 	}
 
 	log.Printf("Starting NFO Searcher server on :%s...", port)
-	log.Printf("API example: curl \"http://localhost:%s/search?q=pattern&dir=.\" ", port)
+	log.Printf("API example: curl \"http://localhost:%s/search/?q=pattern&dir=.\" ", port)
 
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

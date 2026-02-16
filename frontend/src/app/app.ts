@@ -91,7 +91,7 @@ export class App {
     this.searched.set(false);
 
     try {
-      const resp = await fetch(`/search?q=${encodeURIComponent(this.query())}&dir=${encodeURIComponent(this.dir())}`);
+      const resp = await fetch(`/search/?q=${encodeURIComponent(this.query())}&dir=${encodeURIComponent(this.dir())}`);
       if (!resp.ok) {
         const data = await resp.json();
         throw new Error(data.error || `Server returned ${resp.status}`);
