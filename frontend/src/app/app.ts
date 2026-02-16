@@ -24,13 +24,15 @@ interface SearchResponse {
 
       <div style="display: flex; gap: 10px; margin-bottom: 20px;">
         <input
-          [(ngModel)]="query"
+          [ngModel]="query()"
+          (ngModelChange)="query.set($event)"
           placeholder="Search string"
           style="flex: 1; padding: 8px;"
           (keyup.enter)="search()"
         >
         <input
-          [(ngModel)]="dir"
+          [ngModel]="dir()"
+          (ngModelChange)="dir.set($event)"
           placeholder="Directory (e.g. .)"
           style="width: 200px; padding: 8px;"
           (keyup.enter)="search()"

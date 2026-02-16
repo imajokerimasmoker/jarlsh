@@ -79,3 +79,38 @@ func TestSearchNfoFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateDir(t *testing.T) {
+	wd, _ := os.Getwd()
+	tmpDir, _ := os.MkdirTemp("", "validate-dir-test")
+	defer os.RemoveAll(tmpDir)
+
+	subDir := filepath.Join(tmpDir, "sub")
+	os.Mkdir(subDir, 0755)
+
+	tests := []struct {
+		name        string
+		allowedRoot string
+		targetDir   string
+		wantErr     bool
+	}{
+		{"within root", tmpDir, "sub", false},
+		{"same as root", tmpDir, ".", false},
+		{"outside root (parent)", subDir, "..", true},
+		{"outside root (absolute)", subDir, wd, true},
+		{"non-existent", tmpDir, "nonexistent", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := validateDir(tt.allowedRoot, filepath.Join(tt.allowedRoot, tt.targetDir))
+			if tt.name == "outside root (absolute)" {
+				_, err = validateDir(tt.allowedRoot, tt.targetDir)
+			}
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateDir() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

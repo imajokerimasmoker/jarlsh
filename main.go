@@ -16,6 +16,8 @@ import (
 
 const maxFileSize = 10 * 1024 * 1024 // 10MB limit for .nfo files
 
+var allowedRoot string
+
 // SearchResult represents a file found during a search.
 type SearchResult struct {
 	FilePath string    `json:"file_path"`
@@ -74,6 +76,25 @@ func searchNfoFiles(root, query string) ([]SearchResult, error) {
 	return results, err
 }
 
+// validateDir checks if the target directory is within the allowed root.
+func validateDir(allowedRoot, targetDir string) (string, error) {
+	absTarget, err := filepath.Abs(targetDir)
+	if err != nil {
+		return "", fmt.Errorf("invalid directory path")
+	}
+
+	rel, err := filepath.Rel(allowedRoot, absTarget)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("access denied: search is restricted to subdirectories of %s", allowedRoot)
+	}
+
+	if _, err := os.Stat(absTarget); os.IsNotExist(err) {
+		return "", fmt.Errorf("directory %s does not exist", targetDir)
+	}
+
+	return absTarget, nil
+}
+
 // searchHandler handles the /search GET request.
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
@@ -84,38 +105,19 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Path traversal protection: restrict search to the allowed root directory and its subdirectories.
-	allowedRoot := os.Getenv("ALLOWED_ROOT")
-	if allowedRoot == "" {
-		var err error
-		allowedRoot, err = os.Getwd()
-		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Calculate absolute path of the target directory
-	absTarget, err := filepath.Abs(dir)
+	cleanDir, err := validateDir(allowedRoot, dir)
 	if err != nil {
-		http.Error(w, "Invalid directory path", http.StatusBadRequest)
+		if strings.Contains(err.Error(), "access denied") {
+			http.Error(w, err.Error(), http.StatusForbidden)
+		} else if strings.Contains(err.Error(), "does not exist") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
-
-	// Check if absTarget is within allowedRoot
-	if !strings.HasPrefix(absTarget, allowedRoot) {
-		http.Error(w, "Access denied: search is restricted to subdirectories of "+allowedRoot, http.StatusForbidden)
-		return
-	}
-
-	cleanDir := absTarget
 
 	log.Printf("Searching for %q in %s", query, cleanDir)
-
-	if _, err := os.Stat(cleanDir); os.IsNotExist(err) {
-		http.Error(w, fmt.Sprintf("Directory %s does not exist", cleanDir), http.StatusNotFound)
-		return
-	}
 
 	results, err := searchNfoFiles(cleanDir, query)
 
@@ -143,6 +145,15 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+
+	allowedRoot = os.Getenv("ALLOWED_ROOT")
+	if allowedRoot == "" {
+		var err error
+		allowedRoot, err = os.Getwd()
+		if err != nil {
+			log.Fatalf("Error getting working directory: %v", err)
+		}
 	}
 
 	mux := http.NewServeMux()
