@@ -166,26 +166,35 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// Serve Angular frontend
-	distPath := "./frontend/dist/frontend/browser"
+	// Serve Angular frontend (optional)
+	if os.Getenv("SERVE_FRONTEND") == "true" {
+		distPath := "./frontend/dist/frontend/browser"
 
-	// Check if dist exists, if not maybe it is just dist/frontend
-	if _, err := os.Stat(distPath); os.IsNotExist(err) {
-		distPath = "./frontend/dist/frontend"
-	}
-
-	fileServer := http.FileServer(http.Dir(distPath))
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// If the request is for a file that doesn't exist, serve index.html (SPA routing)
-		path := filepath.Join(distPath, r.URL.Path)
-		_, err := os.Stat(path)
-		if os.IsNotExist(err) {
-			http.ServeFile(w, r, filepath.Join(distPath, "index.html"))
-			return
+		// Check if dist exists, if not maybe it is just dist/frontend
+		if _, err := os.Stat(distPath); os.IsNotExist(err) {
+			distPath = "./frontend/dist/frontend"
 		}
-		fileServer.ServeHTTP(w, r)
-	})
+
+		if _, err := os.Stat(distPath); err == nil {
+			log.Printf("Serving frontend from %s", distPath)
+			fileServer := http.FileServer(http.Dir(distPath))
+
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				// If the request is for a file that doesn't exist, serve index.html (SPA routing)
+				path := filepath.Join(distPath, r.URL.Path)
+				_, err := os.Stat(path)
+				if os.IsNotExist(err) {
+					http.ServeFile(w, r, filepath.Join(distPath, "index.html"))
+					return
+				}
+				fileServer.ServeHTTP(w, r)
+			})
+		} else {
+			log.Printf("Frontend directory %s not found, skipping frontend serving", distPath)
+		}
+	} else {
+		log.Printf("Frontend serving is disabled (SERVE_FRONTEND != true)")
+	}
 
 	log.Printf("Starting NFO Searcher server on :%s...", port)
 	log.Printf("API example: curl \"http://localhost:%s/search?q=pattern&dir=.\" ", port)
