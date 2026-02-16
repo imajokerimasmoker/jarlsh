@@ -9,14 +9,17 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
 const maxFileSize = 10 * 1024 * 1024 // 10MB limit for .nfo files
 
 // SearchResult represents a file found during a search.
 type SearchResult struct {
-	FilePath string `json:"file_path"`
+	FilePath string    `json:"file_path"`
+	ModTime  time.Time `json:"mod_time"`
 }
 
 // SearchResponse is the JSON response from the search endpoint.
@@ -52,11 +55,22 @@ func searchNfoFiles(root, query string) ([]SearchResult, error) {
 				return nil
 			}
 			if bytes.Contains(content, queryBytes) {
-				results = append(results, SearchResult{FilePath: path})
+				results = append(results, SearchResult{
+					FilePath: path,
+					ModTime:  info.ModTime(),
+				})
 			}
 		}
 		return nil
 	})
+
+	if err == nil {
+		// Sort results by modification time (newest first)
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].ModTime.After(results[j].ModTime)
+		})
+	}
+
 	return results, err
 }
 

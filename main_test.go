@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSearchNfoFiles(t *testing.T) {
@@ -35,41 +36,46 @@ func TestSearchNfoFiles(t *testing.T) {
 	}
 
 	tests := []struct {
+		name     string
 		query    string
-		expected []string
+		expected []string // expected in order
 	}{
-		{"hello", []string{"file1.nfo", "subdir/file3.nfo"}},
-		{"world", []string{"file1.nfo", "file2.nfo"}},
-		{"goodbye", []string{"file2.nfo"}},
-		{"nonexistent", []string{}},
+		{"hello matches", "hello", []string{"subdir/file3.nfo", "file1.nfo"}}, // file3 is newer if created later? actually WalkDir order might vary, but we sort by ModTime.
+		{"world matches", "world", []string{"file2.nfo", "file1.nfo"}},        // file2 is newer than file1
+		{"goodbye matches", "goodbye", []string{"file2.nfo"}},
+		{"none", "nonexistent", []string{}},
 	}
 
+	// Adjust creation times to ensure deterministic sorting
+	// file1.nfo created first
+	// file2.nfo created second
+	// subdir/file3.nfo created third
+	now := time.Now()
+	os.Chtimes(filepath.Join(tmpDir, "file1.nfo"), now, now.Add(-10*time.Minute))
+	os.Chtimes(filepath.Join(tmpDir, "file2.nfo"), now, now.Add(-5*time.Minute))
+	os.Chtimes(filepath.Join(tmpDir, "subdir/file3.nfo"), now, now)
+
 	for _, tt := range tests {
-		results, err := searchNfoFiles(tmpDir, tt.query)
-		if err != nil {
-			t.Errorf("searchNfoFiles(%q) returned error: %v", tt.query, err)
-			continue
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := searchNfoFiles(tmpDir, tt.query)
+			if err != nil {
+				t.Fatalf("searchNfoFiles(%q) returned error: %v", tt.query, err)
+			}
 
-		if len(results) != len(tt.expected) {
-			t.Errorf("searchNfoFiles(%q) returned %d results, want %d", tt.query, len(results), len(tt.expected))
-		}
+			if len(results) != len(tt.expected) {
+				t.Errorf("searchNfoFiles(%q) returned %d results, want %d", tt.query, len(results), len(tt.expected))
+			}
 
-		// Check if all expected files are in results
-		for _, exp := range tt.expected {
-			found := false
-			for _, res := range results {
-				rel, _ := filepath.Rel(tmpDir, res.FilePath)
-				// Normalize path for comparison on different OS if needed,
-				// but here we are in a linux-like environment.
-				if filepath.ToSlash(rel) == filepath.ToSlash(exp) {
-					found = true
+			// Check if results are in expected order
+			for i, exp := range tt.expected {
+				if i >= len(results) {
 					break
 				}
+				rel, _ := filepath.Rel(tmpDir, results[i].FilePath)
+				if filepath.ToSlash(rel) != filepath.ToSlash(exp) {
+					t.Errorf("searchNfoFiles(%q) result[%d] = %s, want %s", tt.query, i, rel, exp)
+				}
 			}
-			if !found {
-				t.Errorf("searchNfoFiles(%q) did not find expected file %s", tt.query, exp)
-			}
-		}
+		})
 	}
 }
