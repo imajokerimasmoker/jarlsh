@@ -43,6 +43,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "baseHref": "/wooo/",
             "outputPath": "dist/frontend",
             "index": "src/index.html",
             "browser": "src/main.ts",

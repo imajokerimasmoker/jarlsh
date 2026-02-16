@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 interface SearchResult {
   file_path: string;
+  link: string;
   mod_time: string;
 }
 
@@ -51,13 +52,16 @@ interface SearchResponse {
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
             <tr style="text-align: left; border-bottom: 2px solid #ccc;">
-              <th style="padding: 10px;">File Path</th>
+              <th style="padding: 10px;">Album / Directory</th>
               <th style="padding: 10px;">Modified</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let file of results()" style="border-bottom: 1px solid #eee;">
-              <td style="padding: 10px;">{{ file.file_path }}</td>
+              <td style="padding: 10px;">
+                <a [href]="file.link" style="color: #007bff; text-decoration: none;">{{ file.link }}</a>
+                <div style="font-size: 0.8em; color: #666;">{{ file.file_path }}</div>
+              </td>
               <td style="padding: 10px;">{{ file.mod_time | date:'medium' }}</td>
             </tr>
           </tbody>

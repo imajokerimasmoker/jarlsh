@@ -21,6 +21,7 @@ var allowedRoot string
 // SearchResult represents a file found during a search.
 type SearchResult struct {
 	FilePath string    `json:"file_path"`
+	Link     string    `json:"link"`
 	ModTime  time.Time `json:"mod_time"`
 }
 
@@ -57,8 +58,19 @@ func searchNfoFiles(root, query string) ([]SearchResult, error) {
 				return nil
 			}
 			if bytes.Contains(content, queryBytes) {
+				rel, err := filepath.Rel(root, path)
+				link := ""
+				if err == nil {
+					dir := filepath.Dir(rel)
+					if dir == "." {
+						link = "/"
+					} else {
+						link = "/" + filepath.ToSlash(dir)
+					}
+				}
 				results = append(results, SearchResult{
 					FilePath: path,
+					Link:     link,
 					ModTime:  info.ModTime(),
 				})
 			}
@@ -97,6 +109,7 @@ func validateDir(allowedRoot, targetDir string) (string, error) {
 
 // searchHandler handles the /search GET request.
 func searchHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Incoming request: %s %s", r.Method, r.URL.Path)
 	query := r.URL.Query().Get("q")
 	dir := r.URL.Query().Get("dir")
 
@@ -153,6 +166,12 @@ func main() {
 		allowedRoot, err = os.Getwd()
 		if err != nil {
 			log.Fatalf("Error getting working directory: %v", err)
+		}
+	} else {
+		var err error
+		allowedRoot, err = filepath.Abs(allowedRoot)
+		if err != nil {
+			log.Fatalf("Error resolving allowed root: %v", err)
 		}
 	}
 

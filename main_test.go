@@ -75,6 +75,15 @@ func TestSearchNfoFiles(t *testing.T) {
 				if filepath.ToSlash(rel) != filepath.ToSlash(exp) {
 					t.Errorf("searchNfoFiles(%q) result[%d] = %s, want %s", tt.query, i, rel, exp)
 				}
+
+				// Check Link field
+				expectedLink := "/" + filepath.ToSlash(filepath.Dir(exp))
+				if expectedLink == "/." {
+					expectedLink = "/"
+				}
+				if results[i].Link != expectedLink {
+					t.Errorf("searchNfoFiles(%q) result[%d].Link = %s, want %s", tt.query, i, results[i].Link, expectedLink)
+				}
 			}
 		})
 	}
