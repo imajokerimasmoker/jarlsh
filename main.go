@@ -84,16 +84,31 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simple path traversal protection: don't allow absolute paths or going up if we want to restrict to a base.
-	// For now, let's just make sure it stays within the current working directory if it starts with "./"
-	// or allow any path if we trust the user.
-	// Given the prompt "a specified Dirs", let's assume the user knows what they are doing but we'll clean it.
+	// Path traversal protection: restrict search to the allowed root directory and its subdirectories.
+	allowedRoot := os.Getenv("ALLOWED_ROOT")
+	if allowedRoot == "" {
+		var err error
+		allowedRoot, err = os.Getwd()
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
 
-	cleanDir := filepath.Clean(dir)
+	// Calculate absolute path of the target directory
+	absTarget, err := filepath.Abs(dir)
+	if err != nil {
+		http.Error(w, "Invalid directory path", http.StatusBadRequest)
+		return
+	}
 
-	// Optional: restrict to current directory or a configured base directory
-	// baseDir, _ := os.Getwd()
-	// if !strings.HasPrefix(filepath.Join(baseDir, cleanDir), baseDir) { ... }
+	// Check if absTarget is within allowedRoot
+	if !strings.HasPrefix(absTarget, allowedRoot) {
+		http.Error(w, "Access denied: search is restricted to subdirectories of "+allowedRoot, http.StatusForbidden)
+		return
+	}
+
+	cleanDir := absTarget
 
 	log.Printf("Searching for %q in %s", query, cleanDir)
 
@@ -130,18 +145,41 @@ func main() {
 		port = "8080"
 	}
 
-	http.HandleFunc("/search", searchHandler)
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/search", searchHandler)
 
 	// Health check endpoint
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 
-	log.Printf("Starting NFO Searcher server on :%s...", port)
-	log.Printf("Example usage: curl \"http://localhost:%s/search?q=pattern&dir=.\" ", port)
+	// Serve Angular frontend
+	distPath := "./frontend/dist/frontend/browser"
 
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	// Check if dist exists, if not maybe it is just dist/frontend
+	if _, err := os.Stat(distPath); os.IsNotExist(err) {
+		distPath = "./frontend/dist/frontend"
+	}
+
+	fileServer := http.FileServer(http.Dir(distPath))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// If the request is for a file that doesn't exist, serve index.html (SPA routing)
+		path := filepath.Join(distPath, r.URL.Path)
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			http.ServeFile(w, r, filepath.Join(distPath, "index.html"))
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+
+	log.Printf("Starting NFO Searcher server on :%s...", port)
+	log.Printf("API example: curl \"http://localhost:%s/search?q=pattern&dir=.\" ", port)
+
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }
